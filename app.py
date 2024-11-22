@@ -390,7 +390,7 @@ def get_hybrid_recommendations(user_id: int):
         if movie['movie_id'] not in seen_movie_ids:
             seen_movie_ids.add(movie['movie_id'])
             unique_recommendations.append(movie)
-
+    
     return JSONResponse(content=unique_recommendations[:10])
 
 
