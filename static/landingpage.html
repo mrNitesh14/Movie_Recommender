@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #6a11cb, #2575fc);
+            color: white;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+
+        p {
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+        }
+
+        .buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .buttons button,
+        .buttons a {
+            background: white;
+            color: #6a11cb;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        .buttons button:hover,
+        .buttons a:hover {
+            background: #6a11cb;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Welcome!</h1>
+        <p>What kind of content are you interested in? Select a genre or skip to explore everything.</p>
+        <div class="buttons">
+            <button onclick="selectGenre('Action')">Action</button>
+            <button onclick="selectGenre('Romance')">Romance</button>
+            <button onclick="selectGenre('Comedy')">Comedy</button>
+            <button onclick="selectGenre('Drama')">Drama</button>
+            <button onclick="selectGenre('Sci-Fi')">Sci-Fi</button>
+            <a href="main.html">Skip</a>
+        </div>
+    </div>
+
+    <script>
+        function selectGenre(genre) {
+            // Handle genre selection here (e.g., send to backend or redirect)
+            alert(`You selected: ${genre}`);
+            // Example: Redirect to a specific page with the selected genre
+            window.location.href = `main.html?genre=${genre}`;
+        }
+    </script>
+</body>
+
+</html>
