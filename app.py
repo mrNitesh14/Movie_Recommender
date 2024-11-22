@@ -18,77 +18,6 @@ import csv
 DATABASE_FILE = "movie_recommendation.sqlite"
 MOVIES_CSV_FILE = "imdb_top_1000.csv"  # Ensure you have a CSV file named 'movies.csv'
 
-# def initialize_db():
-#     """
-#     Initialize the SQLite database with tables for users and movies.
-#     Populate the movies table with data from a CSV file if it's empty.
-#     """
-#     with sqlite3.connect(DATABASE_FILE) as conn:
-#         cursor = conn.cursor()
-#         # Create users table
-#         cursor.execute("""
-#             CREATE TABLE IF NOT EXISTS users (
-#                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-#                 username TEXT NOT NULL UNIQUE,
-#                 password_hash TEXT NOT NULL,
-#                 favorite_genre TEXT DEFAULT '[]'
-#             )
-#         """)
-#         print("Users table initialized.")
-        
-#         # Create movies table
-#         cursor.execute("""
-#             CREATE TABLE IF NOT EXISTS movies (
-#                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-#                 title TEXT NOT NULL,
-#                 genre TEXT NOT NULL,
-#                 imdb_rating REAL,
-#                 overview TEXT,
-#                 director TEXT,
-#                 released_year TEXT,
-#                 runtime TEXT,
-#                 meta_score REAL,
-#                 votes INTEGER
-#             )
-#         """)
-#         print("Movies table initialized.")
-        
-#         # Check if movies table is empty
-#         cursor.execute("SELECT COUNT(*) FROM movies")
-#         movie_count = cursor.fetchone()[0]
-#         # Inside initialize_db
-#         if movie_count == 0:
-#             # Populate the movies table from the CSV file
-#             try:
-#                 with open(MOVIES_CSV_FILE, "r", encoding="utf-8") as csv_file:
-#                     csv_reader = csv.DictReader(csv_file)
-#                     movies = [
-#                         (
-#                             row["Series_Title"],  # Corrected column name
-#                             row["Genre"],  # Corrected column name
-#                             float(row["IMDB_Rating"]) if row["IMDB_Rating"] else None,
-#                             row["Overview"],
-#                             row["Director"],
-#                             row["Released_Year"],
-#                             row["Runtime"],
-#                             float(row["Meta_score"]) if row["Meta_score"] else None,
-#                             int(row["No_of_Votes"]) if row["No_of_Votes"] else None
-#                         )
-#                         for row in csv_reader
-#                     ]
-#                     cursor.executemany("""
-#                         INSERT INTO movies (title, genre, imdb_rating, overview, director, released_year, runtime, meta_score, votes)
-#                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-#                     """, movies)
-#                     print(f"{len(movies)} movies imported successfully from {MOVIES_CSV_FILE}.")
-#             except FileNotFoundError:
-#                 print(f"Error: CSV file '{MOVIES_CSV_FILE}' not found.")
-#             except Exception as e:
-#                 print(f"Error while importing movies: {e}")
-
-        
-#         conn.commit()
-
 def initialize_db():
     """
     Initialize the SQLite database with tables for users, movies, and user_movie_likes.
@@ -295,7 +224,7 @@ def get_content_based_recommendations(user_id, movies=None, user_movie_likes=Non
     """
     with sqlite3.connect(DATABASE_FILE) as conn:
         if movies is None:
-            movies = pd.read_sql_query("SELECT id, title, genre, overview FROM movies", conn)
+            movies = pd.read_sql_query("SELECT id AS movie_id, title, genre, overview FROM movies", conn)
         if user_movie_likes is None:
             user_movie_likes = pd.read_sql_query("""
                 SELECT user_id, movie_id, liked
@@ -310,21 +239,25 @@ def get_content_based_recommendations(user_id, movies=None, user_movie_likes=Non
         if liked_movies.empty:
             return []  # No liked movies, return an empty list
 
-        # Generate content matrix
-        movies['content'] = movies['genre'] + " " + movies['overview']
+        # Generate a combined content feature (genre + overview)
+        movies['content'] = movies['genre'].fillna('') + " " + movies['overview'].fillna('')
         tfidf = TfidfVectorizer(stop_words='english')
         tfidf_matrix = tfidf.fit_transform(movies['content'])
 
         # Compute cosine similarity
         liked_movie_ids = liked_movies['movie_id'].values
-        liked_indices = movies[movies['id'].isin(liked_movie_ids)].index
+        liked_indices = movies[movies['movie_id'].isin(liked_movie_ids)].index
         similarity_scores = cosine_similarity(tfidf_matrix[liked_indices], tfidf_matrix)
 
-        # Aggregate and recommend
+        # Aggregate similarity scores
         movie_scores = np.mean(similarity_scores, axis=0)
         movies['score'] = movie_scores
-        recommendations = movies[~movies['id'].isin(liked_movie_ids)].sort_values(by='score', ascending=False)
-        return recommendations[['id', 'title', 'score']].head(10).to_dict('records')
+
+        # Exclude already liked movies
+        recommendations = movies[~movies['movie_id'].isin(liked_movie_ids)].sort_values(by='score', ascending=False)
+        return recommendations[['movie_id', 'title', 'genre', 'score']].head(10).to_dict('records')
+
+
 
 
 def get_collaborative_recommendations(user_id):
@@ -363,22 +296,22 @@ def get_collaborative_recommendations(user_id):
         """, movie_ids)
         return [{"id": row[0], "title": row[1], "score": recommendations[row[0]]} for row in cursor.fetchall()]
 
+
 @app.get("/recommendations/hybrid/{user_id}")
 def get_hybrid_recommendations(user_id: int):
     """
-    Parallel hybrid recommendation system: Combines content-based filtering (CBF), collaborative filtering (CF),
-    and a fallback to the most liked movies for new users.
+    Hybrid recommendation system for users with:
+    - No favorite genre but some liked movies: Use content-based filtering + most liked movies.
+    - No activity: Use most liked movies as fallback.
     """
     with sqlite3.connect(DATABASE_FILE) as conn:
-        # Fetch user information
+        # Fetch user details
         user = execute_query("SELECT favorite_genre FROM users WHERE id = ?", (user_id,), fetch_one=True)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-        
-        # Fetch movies data
-        movies = pd.read_sql_query("SELECT id, title, genre, overview FROM movies", conn)
-        
-        # Fetch user-movie likes (interaction data)
+
+        # Fetch movie and user-movie like data
+        movies = pd.read_sql_query("SELECT id AS movie_id, title, genre, overview FROM movies", conn)
         user_movie_likes = pd.read_sql_query("""
             SELECT user_id, movie_id, liked
             FROM user_movie_likes
@@ -389,11 +322,10 @@ def get_hybrid_recommendations(user_id: int):
         (user_movie_likes['user_id'] == user_id) & (user_movie_likes['liked'] == 1)
     ]
 
-    if liked_movies.empty:  # New user or no activity
-        # Fallback to most liked movies with detailed information
+    if liked_movies.empty:  # No liked movies, fallback to most liked globally
         most_liked_movies = pd.read_sql_query("""
             SELECT 
-                movies.id, 
+                movies.id AS movie_id, 
                 movies.title, 
                 movies.genre, 
                 movies.overview, 
@@ -407,32 +339,37 @@ def get_hybrid_recommendations(user_id: int):
         """, conn)
         return most_liked_movies.to_dict('records')
 
-    # If the user has liked movies, proceed with hybrid recommendations
+    # Use content-based recommendations
     cbf_recommendations = get_content_based_recommendations(user_id, movies, user_movie_likes)
-    cf_recommendations = get_collaborative_recommendations(user_id)
 
-    # Combine recommendations using weighted scores
-    combined_scores = {}
-    for rec in cbf_recommendations:
-        combined_scores[rec['id']] = combined_scores.get(rec['id'], 0) + rec['score'] * 0.5
-    for rec in cf_recommendations:
-        combined_scores[rec['id']] = combined_scores.get(rec['id'], 0) + rec['score'] * 0.5
+    # Add global most liked movies to fill remaining slots
+    most_liked_movies = pd.read_sql_query("""
+        SELECT 
+            movies.id AS movie_id, 
+            movies.title, 
+            movies.genre, 
+            movies.overview, 
+            COUNT(user_movie_likes.movie_id) AS like_count
+        FROM movies
+        LEFT JOIN user_movie_likes 
+            ON movies.id = user_movie_likes.movie_id AND user_movie_likes.liked = 1
+        GROUP BY movies.id
+        ORDER BY like_count DESC
+        LIMIT 10
+    """, conn).to_dict('records')
 
-    # Fetch movie details and sort by combined score
-    combined_recommendations = sorted(combined_scores.items(), key=lambda x: x[1], reverse=True)
-    with sqlite3.connect(DATABASE_FILE) as conn:
-        cursor = conn.cursor()
-        cursor.execute(f"""
-            SELECT id, title, genre, overview
-            FROM movies
-            WHERE id IN ({','.join('?' for _ in combined_recommendations)})
-        """, [rec[0] for rec in combined_recommendations])
-        movies = cursor.fetchall()
+    # Combine content-based and global most liked movies
+    recommendations = cbf_recommendations + most_liked_movies
 
-    return [
-        {"id": movie[0], "title": movie[1], "genre": movie[2], "overview": movie[3], "score": combined_scores[movie[0]]}
-        for movie in movies
-    ]
+    # Deduplicate recommendations based on movie ID
+    seen_movie_ids = set()
+    unique_recommendations = []
+    for movie in recommendations:
+        if movie['movie_id'] not in seen_movie_ids:
+            seen_movie_ids.add(movie['movie_id'])
+            unique_recommendations.append(movie)
+
+    return unique_recommendations[:10]
 
 
 @app.post("/users/{user_id}/like_movie/")
@@ -480,85 +417,3 @@ def search_movies(genre: str = None, title: str = None):
     
     return [{"title": m[0], "genre": m[1], "imdb_rating": m[2]} for m in movies]
 
-
-
-
-
-# @app.get("/recommendations/{user_id}")
-# def get_recommendations(user_id: int):
-#     """
-#     Recommend movies based on the activity of other users.
-#     """
-#     # Get the list of movies the user has already liked
-#     liked_movies = execute_query("""
-#         SELECT movie_id FROM user_movie_likes 
-#         WHERE user_id = ? AND liked = 1
-#     """, (user_id,), fetch_all=True)
-    
-#     liked_movie_ids = [movie[0] for movie in liked_movies]
-
-#     # Get all movies liked by other users
-#     all_liked_movies = execute_query("""
-#         SELECT user_id, movie_id 
-#         FROM user_movie_likes 
-#         WHERE movie_id NOT IN ({})
-#     """.format(','.join('?' for _ in liked_movie_ids)), tuple(liked_movie_ids), fetch_all=True)
-    
-#     # Count how many users liked each movie
-#     movie_like_count = {}
-#     for user_id, movie_id in all_liked_movies:
-#         if movie_id not in movie_like_count:
-#             movie_like_count[movie_id] = 0
-#         movie_like_count[movie_id] += 1
-
-#     # Sort movies by popularity (most liked by other users)
-#     sorted_movies = sorted(movie_like_count.items(), key=lambda x: x[1], reverse=True)
-
-#     # Get details of the top recommended movies
-#     recommended_movies = []
-#     for movie_id, _ in sorted_movies[:10]:  # Limit to top 10 recommendations
-#         movie = execute_query("SELECT title, genre, imdb_rating, overview FROM movies WHERE id = ?", (movie_id,), fetch_one=True)
-#         if movie:
-#             recommended_movies.append({
-#                 "title": movie[0],
-#                 "genre": movie[1],
-#                 "imdb_rating": movie[2],
-#                 "overview": movie[3]
-#             })
-    
-#     if not recommended_movies:
-#         raise HTTPException(status_code=404, detail="No recommendations found")
-    
-#     return recommended_movies
-
-
-# @app.post("/users/{user_id}/like_movie/")
-# def like_movie(user_id: int, movie_id: int):
-#     """
-#     Allow a user to like a movie. Add the movie's genre to the user's favorite genres.
-#     """
-#     # Ensure the user exists
-#     user = execute_query("SELECT favorite_genre FROM users WHERE id = ?", (user_id,), fetch_one=True)
-#     if not user:
-#         raise HTTPException(status_code=404, detail="User not found")
-
-#     # Ensure the movie exists
-#     movie = execute_query("SELECT genre FROM movies WHERE id = ?", (movie_id,), fetch_one=True)
-#     if not movie:
-#         raise HTTPException(status_code=404, detail="Movie not found")
-
-#     # Get user's favorite genres and movie genres
-#     favorite_genres = json.loads(user[0])  # Deserialize user's favorite genres
-#     movie_genres = [g.strip() for g in movie[0].split(",")]  # Split and clean up movie genres
-
-#     # Add new genres to user's favorite genres
-#     updated_favorite_genres = set(favorite_genres)  # Use a set to avoid duplicates
-#     updated_favorite_genres.update(g.lower() for g in movie_genres)  # Add movie genres in lowercase
-
-#     # Update the user's favorite genres in the database
-#     execute_query(
-#         "UPDATE users SET favorite_genre = ? WHERE id = ?",
-#         (json.dumps(list(updated_favorite_genres)), user_id)
-#     )
-
-#     return {"message": f"User {user_id}'s favorite genres updated successfully!", "updated_genres": list(updated_favorite_genres)}
