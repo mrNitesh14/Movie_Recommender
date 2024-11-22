@@ -74,16 +74,28 @@
             <button onclick="selectGenre('Comedy')">Comedy</button>
             <button onclick="selectGenre('Drama')">Drama</button>
             <button onclick="selectGenre('Sci-Fi')">Sci-Fi</button>
-            <a href="main.html">Skip</a>
+            <a href="main.html" onclick="fetchRecommendations()">Skip</a>
         </div>
     </div>
 
     <script>
         function selectGenre(genre) {
-            // Handle genre selection here (e.g., send to backend or redirect)
-            alert(`You selected: ${genre}`);
             // Example: Redirect to a specific page with the selected genre
             window.location.href = `main.html?genre=${genre}`;
+        }
+
+        async function fetchRecommendations() {
+            const userId = 1; // Replace with the logged-in user's ID
+            const response = await fetch(`http://127.0.0.1:8000/recommendations/hybrid/${userId}`);
+
+            if (response.ok) {
+                const recommendations = await response.json();
+                console.log(recommendations);
+                // Pass recommendations to the main page
+                window.location.href = `main.html?movies=${encodeURIComponent(JSON.stringify(recommendations))}`;
+            } else {
+                alert("Failed to fetch recommendations.");
+            }
         }
     </script>
 </body>

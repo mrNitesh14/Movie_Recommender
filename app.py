@@ -10,6 +10,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 import numpy as np
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -218,8 +219,7 @@ def login(request: LoginRequest):
     if not verify_password(password, hashed_password):
         raise HTTPException(status_code=400, detail="Invalid username or password")
     
-    return RedirectResponse(url="/static/landingpage.html", status_code=302)
-
+    return {"message": f"User {username} logged in successfully!", "user_id": user_id}
 
 
 @app.post("/users/{user_id}/favorite_genre/")
@@ -391,7 +391,7 @@ def get_hybrid_recommendations(user_id: int):
             seen_movie_ids.add(movie['movie_id'])
             unique_recommendations.append(movie)
 
-    return unique_recommendations[:10]
+    return JSONResponse(content=unique_recommendations[:10])
 
 
 @app.post("/users/{user_id}/like_movie/")
