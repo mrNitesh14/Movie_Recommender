@@ -277,7 +277,7 @@ def get_content_based_recommendations(user_id, movies=None, user_movie_likes=Non
 
         # Exclude already liked movies
         recommendations = movies[~movies['movie_id'].isin(liked_movie_ids)].sort_values(by='score', ascending=False)
-        return recommendations[['movie_id', 'title', 'genre', 'score']].head(10).to_dict('records')
+        return recommendations[['movie_id', 'title', 'genre', 'overview', 'score']].head(10).to_dict('records')
 
 
 
@@ -316,7 +316,7 @@ def get_collaborative_recommendations(user_id):
             FROM movies
             WHERE id IN ({','.join('?' for _ in movie_ids)})
         """, movie_ids)
-        return [{"id": row[0], "title": row[1], "score": recommendations[row[0]]} for row in cursor.fetchall()]
+        return [{"id": row[0], "title": row[1], "overview": row[3],"score": recommendations[row[0]]} for row in cursor.fetchall()]
 
 
 @app.get("/recommendations/hybrid/{user_id}")
