@@ -7,6 +7,9 @@ import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import TfidfVectorizer
 import numpy as np
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -200,6 +203,7 @@ def login(username: str, password: str):
     
     return {"message": f"User {username} logged in successfully!", "user_id": user_id}
 
+
 @app.post("/users/{user_id}/favorite_genre/")
 def update_favorite_genre(user_id: int, favorite_genres: List[str]):
     """
@@ -368,8 +372,8 @@ def get_hybrid_recommendations(user_id: int):
         if movie['movie_id'] not in seen_movie_ids:
             seen_movie_ids.add(movie['movie_id'])
             unique_recommendations.append(movie)
-
-    return unique_recommendations[:10]
+    
+    return JSONResponse(content=unique_recommendations[:10])
 
 
 @app.post("/users/{user_id}/like_movie/")

@@ -76,15 +76,20 @@
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ username, password }),
                 });
+                // const data = await response.json();
+                const data = await response.json();
 
-                if (response.redirected) {
-                    window.location.href = response.url;
-                } else if (response.ok) {
-                    const data = await response.json();
-                    alert(data.message); // Handle successful login message
+                // Check if the login was successful
+                if (response.ok) {
+                    alert(data.message);
+
+                    // Store the user_id in localStorage
+                    localStorage.setItem("user_id", data.user_id);
+
+                    // Redirect to the landing page
+                    window.location.href = "landingpage.html";  // or any page you want after successful login
                 } else {
-                    const error = await response.json();
-                    alert(error.detail); // Handle error message
+                    alert(data.detail || "An unknown error occurred.");
                 }
             } catch (err) {
                 console.error("Error:", err);
