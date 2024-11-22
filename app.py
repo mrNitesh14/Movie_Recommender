@@ -4,7 +4,6 @@ from fastapi import FastAPI, HTTPException
 from typing import List
 import bcrypt
 import pandas as pd
-from fastapi.staticfiles import StaticFiles
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import TfidfVectorizer
 import numpy as np
@@ -14,15 +13,6 @@ from fastapi.responses import JSONResponse
 
 # Initialize FastAPI app
 app = FastAPI()
-
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Update this to the frontend URL in production
-    allow_methods=["*"],
-    allow_headers=["*"]
-)
 
 import sqlite3
 import csv
@@ -194,20 +184,12 @@ def signup(username: str, password: str):
     
     return {"message": "User created successfully!"}
 
-from pydantic import BaseModel
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-
 @app.post("/login/")
-def login(request: LoginRequest):
+def login(username: str, password: str):
     """
     User login: Validate username and password.
     """
     # Fetch the user from the database
-    username = request.username
-    password = request.password
     stored_user = execute_query("SELECT id, password_hash FROM users WHERE username = ?", 
                                 (username,), fetch_one=True)
     
